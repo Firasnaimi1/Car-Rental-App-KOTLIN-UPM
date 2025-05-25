@@ -44,9 +44,11 @@ class RatingRepository(
         score: Float,
         comment: String?
     ): Rating? {
-        // Check if reservation exists and is completed
+        // Check if reservation exists and is either completed or approved and paid
         val reservation = reservationDao.getReservationById(reservationId)
-        if (reservation == null || reservation.status != ReservationStatus.COMPLETED) {
+        if (reservation == null || 
+            (reservation.status != ReservationStatus.COMPLETED && 
+             !(reservation.status == ReservationStatus.APPROVED && reservation.isPaid))) {
             return null
         }
         

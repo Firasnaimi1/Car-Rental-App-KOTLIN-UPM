@@ -137,7 +137,8 @@ fun MyReservationsScreen(
                                     }
                                 },
                                 onRate = {
-                                    if (reservation.status == ReservationStatus.COMPLETED) {
+                                    if (reservation.status == ReservationStatus.COMPLETED || 
+                                        (reservation.status == ReservationStatus.APPROVED && reservation.isPaid)) {
                                         selectedReservation = reservation
                                         showRatingDialog = true
                                         // Check if already rated
@@ -363,11 +364,20 @@ private fun ReservationItem(
                             Text("Pay Now")
                         }
                     } else {
-                        // Already paid, just show info
+                        // Already paid, show both info and rating option
                         Text(
                             text = "Your reservation is confirmed. Enjoy your trip!",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(bottom = 8.dp)
                         )
+                        
+                        // Add rating button for ongoing rentals
+                        Button(
+                            onClick = onRate,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Rate This Car")
+                        }
                     }
                 }
                 
