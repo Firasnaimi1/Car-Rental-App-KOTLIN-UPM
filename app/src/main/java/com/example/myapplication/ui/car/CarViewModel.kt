@@ -1,5 +1,6 @@
 package com.example.myapplication.ui.car
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -309,8 +310,24 @@ class CarViewModel(private val carRepository: CarRepository) : ViewModel() {
     fun updateCar(car: Car) {
         viewModelScope.launch {
             try {
+                // First update the car data
                 carRepository.updateCar(car)
-                // Update both car states
+                
+                // If the car has an imageUri, ensure it's properly stored in both the car and car_images tables
+                if (car.imageUri != null && car.imageUri.isNotEmpty()) {
+                    try {
+                        // Convert the string URI back to a Uri object
+                        val uri = Uri.parse(car.imageUri)
+                        // Save the image in car_images table and update the car's imageUri
+                        carRepository.updateCarImage(car.carId, uri)
+                    } catch (e: Exception) {
+                        // Just log the error and continue - the car data is already saved
+                        e.printStackTrace()
+                        println("Error saving car image: ${e.message}")
+                    }
+                }
+                
+                // Update all states
                 _carState.value = CarState.Success(car)
                 loadCarDetail(car.carId)
                 // Also update user cars list

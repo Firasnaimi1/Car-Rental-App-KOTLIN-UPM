@@ -56,12 +56,29 @@ fun CarItem(
                     android.R.drawable.ic_menu_gallery
                 }
                 
+                // Safe image model creation - using remember to move try-catch outside composition
+                val imageModel = remember(imageUri) {
+                    if (imageUri is String) {
+                        try {
+                            ImageRequest.Builder(context)
+                                .data(imageUri)
+                                .crossfade(true)
+                                .placeholder(android.R.drawable.ic_menu_gallery)
+                                .fallback(android.R.drawable.ic_menu_gallery)
+                                .error(android.R.drawable.ic_menu_report_image)
+                                .build()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            android.R.drawable.ic_menu_gallery
+                        }
+                    } else {
+                        android.R.drawable.ic_menu_gallery
+                    }
+                }
+                
                 // Use SubcomposeAsyncImage to handle loading states
                 SubcomposeAsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(imageUri)
-                        .crossfade(true)
-                        .build(),
+                    model = imageModel,
                     contentDescription = "${car.brand} ${car.model}",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),

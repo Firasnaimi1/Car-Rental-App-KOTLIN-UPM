@@ -90,6 +90,13 @@ class CarRepository(private val carDao: CarDao, private val context: Context) {
                 )
                 carDao.insertCarImage(newImage)
             }
+            
+            // Most importantly, update the imageUri in the Car object itself
+            val car = carDao.getCarById(carId)
+            if (car != null) {
+                val updatedCar = car.copy(imageUri = savedImageUri)
+                carDao.updateCar(updatedCar)
+            }
         } catch (e: Exception) {
             // Log error but don't crash
             e.printStackTrace()
@@ -111,6 +118,7 @@ class CarRepository(private val carDao: CarDao, private val context: Context) {
     ): Car {
         try {
             val carId = UUID.randomUUID().toString()
+            val savedImageUri = imageUri?.toString()
             
             val car = Car(
                 carId = carId,
@@ -123,7 +131,8 @@ class CarRepository(private val carDao: CarDao, private val context: Context) {
                 location = location,
                 isAvailable = true,
                 rating = 0f,
-                ratingCount = 0
+                ratingCount = 0,
+                imageUri = savedImageUri // Set the imageUri directly on the Car object
             )
             
             val result = insertCar(car)
@@ -131,11 +140,8 @@ class CarRepository(private val carDao: CarDao, private val context: Context) {
                 throw Exception("Failed to insert car into database")
             }
             
-            if (imageUri != null) {
+            if (imageUri != null && savedImageUri != null) {
                 try {
-                    // Simply store the URI string directly
-                    val savedImageUri = imageUri.toString()
-                    
                     val carImage = CarImage(
                         imageId = UUID.randomUUID().toString(),
                         carId = carId,

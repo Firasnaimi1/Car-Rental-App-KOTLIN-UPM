@@ -536,14 +536,28 @@ private fun CarDetailsContent(
                 android.R.drawable.ic_menu_gallery
             }
             
+            // Safe image model creation - no try-catch in composable
+            val context = LocalContext.current
+            val imageModel = remember(imageUri) {
+                if (imageUri is String) {
+                    try {
+                        ImageRequest.Builder(context)
+                            .data(imageUri)
+                            .crossfade(true)
+                            .placeholder(android.R.drawable.ic_menu_gallery)
+                            .fallback(android.R.drawable.ic_menu_gallery)
+                            .error(android.R.drawable.ic_menu_report_image)
+                            .build()
+                    } catch (e: Exception) {
+                        android.R.drawable.ic_menu_gallery
+                    }
+                } else {
+                    android.R.drawable.ic_menu_gallery
+                }
+            }
+            
             SubcomposeAsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(imageUri)
-                    .crossfade(true)
-                    .placeholder(android.R.drawable.ic_menu_gallery)
-                    .fallback(android.R.drawable.ic_menu_gallery)
-                    .error(android.R.drawable.ic_menu_report_image)
-                    .build(),
+                model = imageModel,
                 contentDescription = "${car.brand} ${car.model}",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
