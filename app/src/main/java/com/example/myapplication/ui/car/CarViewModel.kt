@@ -272,7 +272,8 @@ class CarViewModel(private val carRepository: CarRepository) : ViewModel() {
                     year = year,
                     description = description,
                     pricePerDay = pricePerDay,
-                    location = location
+                    location = location,
+                    imageUri = if (imageUri == null) existingCar.imageUri else null
                 )
                 
                 carRepository.updateCar(updatedCar)

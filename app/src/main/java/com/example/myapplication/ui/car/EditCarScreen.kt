@@ -252,21 +252,22 @@ fun EditCarScreen(
                                 )
                             }
                         }
-                    } else if (existingImageUrl != null) {
-                        // Show existing image
-                        Box(
+                } else if (existingImageUrl != null) {
+                    // Show existing image
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                    ) {
+                        Image(
+                            painter = rememberAsyncImagePainter(existingImageUrl),
+                            contentDescription = "Current Car Image",
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp)
-                        ) {
-                            Image(
-                                painter = rememberAsyncImagePainter(existingImageUrl),
-                                contentDescription = "Current Car Image",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .border(1.dp, MaterialTheme.colorScheme.outline),
-                                contentScale = ContentScale.Crop
-                            )
+                                .fillMaxSize()
+                                .border(1.dp, MaterialTheme.colorScheme.outline),
+                            contentScale = ContentScale.Crop
+                        )
+                        
                             
                             Button(
                                 onClick = { imagePicker.launch("image/*") },
@@ -350,7 +351,7 @@ fun EditCarScreen(
                                 description = description,
                                 pricePerDay = price,
                                 location = location,
-                                imageUri = selectedImageUri
+                                imageUri = selectedImageUri ?: existingImageUrl?.let { Uri.parse(it) }
                             )
                         },
                         modifier = Modifier.fillMaxWidth(),
