@@ -58,9 +58,30 @@ class CarRepository(private val carDao: CarDao, private val context: Context) {
     
     private suspend fun saveImageToInternalStorage(imageUri: Uri, filename: String): String = withContext(Dispatchers.IO) {
         try {
-            // For simplicity, just return the original URI as a string
-            // This avoids potential file access issues
-            return@withContext imageUri.toString()
+            // Create a directory for car images if it doesn't exist
+            val directory = File(context.filesDir, "car_images")
+            if (!directory.exists()) {
+                directory.mkdirs()
+            }
+            
+            // Create a file to save the image
+            val file = File(directory, "${UUID.randomUUID()}.jpg")
+            
+            // Get the bitmap from the URI
+            val bitmap = if (Build.VERSION.SDK_INT < 28) {
+                MediaStore.Images.Media.getBitmap(context.contentResolver, imageUri)
+            } else {
+                val source = ImageDecoder.createSource(context.contentResolver, imageUri)
+                ImageDecoder.decodeBitmap(source)
+            }
+            
+            // Save the bitmap to file
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            
+            // Return the file path
+            return@withContext file.absolutePath
         } catch (e: Exception) {
             e.printStackTrace()
             // Return empty string instead of throwing exception
@@ -71,7 +92,7 @@ class CarRepository(private val carDao: CarDao, private val context: Context) {
     suspend fun updateCarImage(carId: String, imageUri: Uri) = withContext(Dispatchers.IO) {
         try {
             // Simply store the original URI string
-            val savedImageUri = imageUri.toString()
+            val savedImageUri = saveImageToInternalStorage(imageUri, "car_image")
             
             // Get existing primary image
             val existingImage = carDao.getCarPrimaryImage(carId)
@@ -118,7 +139,12 @@ class CarRepository(private val carDao: CarDao, private val context: Context) {
     ): Car {
         try {
             val carId = UUID.randomUUID().toString()
-            val savedImageUri = imageUri?.toString()
+            var savedImagePath = ""
+            
+            // Save the image to internal storage if provided
+            if (imageUri != null) {
+                savedImagePath = saveImageToInternalStorage(imageUri, "car_${carId}_${System.currentTimeMillis()}")
+            }
             
             val car = Car(
                 carId = carId,
@@ -132,7 +158,7 @@ class CarRepository(private val carDao: CarDao, private val context: Context) {
                 isAvailable = true,
                 rating = 0f,
                 ratingCount = 0,
-                imageUri = savedImageUri // Set the imageUri directly on the Car object
+                imageUri = if (savedImagePath.isNotEmpty()) savedImagePath else null
             )
             
             val result = insertCar(car)
@@ -140,12 +166,13 @@ class CarRepository(private val carDao: CarDao, private val context: Context) {
                 throw Exception("Failed to insert car into database")
             }
             
-            if (imageUri != null && savedImageUri != null) {
+            // Save the image reference in the car_images table if we have a saved image
+            if (savedImagePath.isNotEmpty()) {
                 try {
                     val carImage = CarImage(
                         imageId = UUID.randomUUID().toString(),
                         carId = carId,
-                        imageUrl = savedImageUri,
+                        imageUrl = savedImagePath,
                         isPrimary = true
                     )
                     insertCarImage(carImage)
