@@ -4,9 +4,7 @@ import androidx.room.TypeConverter
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-/**
- * Type converters for Room database to handle non-primitive types
- */
+
 class Converters {
     private val formatter = DateTimeFormatter.ISO_LOCAL_DATE
 

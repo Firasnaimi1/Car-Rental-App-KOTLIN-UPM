@@ -51,6 +51,13 @@ class RatingViewModel(private val ratingRepository: RatingRepository) : ViewMode
         _submitRatingState.value = SubmitRatingState.Loading
         viewModelScope.launch {
             try {
+                // Check if rating already exists for this reservation
+                val existingRating = ratingRepository.getRatingByReservationId(reservationId)
+                if (existingRating != null) {
+                    _submitRatingState.value = SubmitRatingState.AlreadyRated
+                    return@launch
+                }
+                
                 val rating = ratingRepository.addRating(
                     userId = userId,
                     carId = carId,
@@ -64,7 +71,7 @@ class RatingViewModel(private val ratingRepository: RatingRepository) : ViewMode
                     // Refresh ratings for this car
                     loadCarRatings(carId)
                 } else {
-                    _submitRatingState.value = SubmitRatingState.Error("You can only rate after a completed reservation")
+                    _submitRatingState.value = SubmitRatingState.Error("Failed to submit rating")
                 }
             } catch (e: Exception) {
                 _submitRatingState.value = SubmitRatingState.Error(e.message ?: "Failed to submit rating")
@@ -81,7 +88,7 @@ class RatingViewModel(private val ratingRepository: RatingRepository) : ViewMode
                     _submitRatingState.value = SubmitRatingState.AlreadyRated
                 }
             } catch (e: Exception) {
-                // Ignore errors here, as the user will just see the rating form
+                // Ignore errors here
             }
         }
     }

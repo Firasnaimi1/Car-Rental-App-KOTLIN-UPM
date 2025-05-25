@@ -7,7 +7,6 @@ class CarRentalApplication : Application() {
     
     override fun onCreate() {
         super.onCreate()
-        // Initialize the database
         AppModule.provideDatabase(this)
     }
 } 

@@ -1,7 +1,14 @@
 package com.example.myapplication.ui.profile
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -10,10 +17,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.rememberAsyncImagePainter
 import com.example.myapplication.data.model.User
 import com.example.myapplication.data.model.UserType
 import com.example.myapplication.di.AppModule
@@ -25,16 +37,37 @@ fun ProfileScreen(
     navController: NavController,
     currentUser: User,
     viewModel: ProfileViewModel = viewModel(
-        factory = ProfileViewModel.Factory(AppModule.provideUserRepository(androidx.compose.ui.platform.LocalContext.current))
+        factory = ProfileViewModel.Factory(
+            AppModule.provideUserRepository(androidx.compose.ui.platform.LocalContext.current),
+            androidx.compose.ui.platform.LocalContext.current
+        )
     ),
     authViewModel: AuthViewModel = viewModel(
         factory = AuthViewModel.Factory(AppModule.provideUserRepository(androidx.compose.ui.platform.LocalContext.current))
     )
 ) {
     val profileState by viewModel.profileState.collectAsState()
+    val editProfileState by viewModel.editProfileState.collectAsState()
+    
+    // Dialog state
+    var showEditDialog by remember { mutableStateOf(false) }
+    
+    // Edit form state
+    var editFullName by remember { mutableStateOf("") }
+    var editPhoneNumber by remember { mutableStateOf("") }
+    var editAddress by remember { mutableStateOf("") }
+    var editError by remember { mutableStateOf<String?>(null) }
     
     LaunchedEffect(currentUser.userId) {
         viewModel.loadUserProfile(currentUser.userId)
+    }
+    
+    // Reset dialog when edit is successful
+    LaunchedEffect(editProfileState) {
+        if (editProfileState is EditProfileState.Success) {
+            showEditDialog = false
+            viewModel.resetEditProfileState()
+        }
     }
 
     Scaffold(
@@ -69,12 +102,66 @@ fun ProfileScreen(
                             .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = "Profile Picture",
-                            modifier = Modifier.size(120.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                        // Profile image with upload capability
+                        var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+                        val imagePicker = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.GetContent()
+                        ) { uri: Uri? ->
+                            selectedImageUri = uri
+                            if (uri != null) {
+                                // Update profile with new image
+                                viewModel.updateUserProfile(
+                                    user = user,
+                                    newFullName = user.fullName,
+                                    newPhoneNumber = user.phoneNumber,
+                                    newAddress = user.address,
+                                    imageUri = uri
+                                )
+                            }
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .size(120.dp)
+                                .clip(CircleShape)
+                                .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                .clickable { imagePicker.launch("image/*") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (user.profileImageUri != null) {
+                                Image(
+                                    painter = rememberAsyncImagePainter(user.profileImageUri.toUri()),
+                                    contentDescription = "Profile Picture",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.AccountCircle,
+                                    contentDescription = "Profile Picture",
+                                    modifier = Modifier.size(100.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            
+                            // Camera icon overlay
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(36.dp),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CameraAlt,
+                                    contentDescription = "Change Profile Picture",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier
+                                        .padding(8.dp)
+                                        .size(20.dp)
+                                )
+                            }
+                        }
                         
                         Spacer(modifier = Modifier.height(24.dp))
                         
@@ -121,7 +208,14 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.height(32.dp))
                         
                         OutlinedButton(
-                            onClick = { /* Navigate to edit profile */ },
+                            onClick = { 
+                                // Initialize edit form with current values
+                                editFullName = user.fullName
+                                editPhoneNumber = user.phoneNumber
+                                editAddress = user.address
+                                editError = null
+                                showEditDialog = true
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(
@@ -134,6 +228,23 @@ fun ProfileScreen(
                         }
                         
                         Spacer(modifier = Modifier.height(16.dp))
+                        
+                        if (user.userType == UserType.OWNER) {
+                            OutlinedButton(
+                                onClick = { navController.navigate("reservation_history") },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Reservation History")
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
                         
                         Button(
                             onClick = { 
@@ -156,6 +267,169 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Logout")
                         }
+                    }
+                    
+                    // Edit Profile Dialog
+                    if (showEditDialog) {
+                        var selectedEditImageUri by remember { mutableStateOf<Uri?>(null) }
+                        val editImagePicker = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.GetContent()
+                        ) { uri: Uri? ->
+                            selectedEditImageUri = uri
+                        }
+                        
+                        AlertDialog(
+                            onDismissRequest = { showEditDialog = false },
+                            title = { Text("Edit Profile") },
+                            text = {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    // Profile image selection
+                                    Box(
+                                        modifier = Modifier
+                                            .size(100.dp)
+                                            .clip(CircleShape)
+                                            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                            .clickable { editImagePicker.launch("image/*") },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (selectedEditImageUri != null) {
+                                            Image(
+                                                painter = rememberAsyncImagePainter(selectedEditImageUri),
+                                                contentDescription = "Profile Picture",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        } else if (user.profileImageUri != null) {
+                                            Image(
+                                                painter = rememberAsyncImagePainter(user.profileImageUri.toUri()),
+                                                contentDescription = "Profile Picture",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.AccountCircle,
+                                                contentDescription = "Profile Picture",
+                                                modifier = Modifier.size(80.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        
+                                        // Camera icon overlay
+                                        Surface(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .size(30.dp),
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.primaryContainer
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CameraAlt,
+                                                contentDescription = "Change Profile Picture",
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier
+                                                    .padding(6.dp)
+                                                    .size(18.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    
+                                    OutlinedTextField(
+                                        value = editFullName,
+                                        onValueChange = { editFullName = it },
+                                        label = { Text("Full Name") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        enabled = editProfileState != EditProfileState.Loading
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    OutlinedTextField(
+                                        value = editPhoneNumber,
+                                        onValueChange = { editPhoneNumber = it },
+                                        label = { Text("Phone Number") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        enabled = editProfileState != EditProfileState.Loading
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    OutlinedTextField(
+                                        value = editAddress,
+                                        onValueChange = { editAddress = it },
+                                        label = { Text("Address") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        enabled = editProfileState != EditProfileState.Loading
+                                    )
+                                    
+                                    if (editError != null) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = editError!!,
+                                            color = MaterialTheme.colorScheme.error,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    
+                                    if (editProfileState is EditProfileState.Error) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = (editProfileState as EditProfileState.Error).message,
+                                            color = MaterialTheme.colorScheme.error,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        editError = null
+                                        
+                                        if (editFullName.isBlank() || editPhoneNumber.isBlank() || editAddress.isBlank()) {
+                                            editError = "All fields are required"
+                                            return@Button
+                                        }
+                                        
+                                        viewModel.updateUserProfile(
+                                            user = user,
+                                            newFullName = editFullName,
+                                            newPhoneNumber = editPhoneNumber,
+                                            newAddress = editAddress,
+                                            imageUri = selectedEditImageUri
+                                        )
+                                    },
+                                    enabled = editProfileState != EditProfileState.Loading
+                                ) {
+                                    if (editProfileState is EditProfileState.Loading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    } else {
+                                        Text("Save")
+                                    }
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(
+                                    onClick = { showEditDialog = false },
+                                    enabled = editProfileState != EditProfileState.Loading
+                                ) {
+                                    Text("Cancel")
+                                }
+                            }
+                        )
                     }
                 }
                 

@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "1bb91d3e4e6c365297798bceff7cbf6c",
+    "identityHash": "de613189027dc3eeb4d0d627d1595f23",
     "entities": [
       {
         "tableName": "users",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userId` TEXT NOT NULL, `email` TEXT NOT NULL, `password` TEXT NOT NULL, `fullName` TEXT NOT NULL, `phoneNumber` TEXT NOT NULL, `address` TEXT NOT NULL, `userType` TEXT NOT NULL, `profileImageUrl` TEXT, `rating` REAL NOT NULL, `ratingCount` INTEGER NOT NULL, PRIMARY KEY(`userId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userId` TEXT NOT NULL, `email` TEXT NOT NULL, `password` TEXT NOT NULL, `fullName` TEXT NOT NULL, `phoneNumber` TEXT NOT NULL, `address` TEXT NOT NULL, `userType` TEXT NOT NULL, `profileImageUri` TEXT, `rating` REAL NOT NULL, `ratingCount` INTEGER NOT NULL, PRIMARY KEY(`userId`))",
         "fields": [
           {
             "fieldPath": "userId",
@@ -51,8 +51,8 @@
             "notNull": true
           },
           {
-            "fieldPath": "profileImageUrl",
-            "columnName": "profileImageUrl",
+            "fieldPath": "profileImageUri",
+            "columnName": "profileImageUri",
             "affinity": "TEXT",
             "notNull": false
           },
@@ -80,7 +80,7 @@
       },
       {
         "tableName": "cars",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`carId` TEXT NOT NULL, `ownerId` TEXT NOT NULL, `brand` TEXT NOT NULL, `model` TEXT NOT NULL, `year` INTEGER NOT NULL, `description` TEXT NOT NULL, `pricePerDay` REAL NOT NULL, `location` TEXT NOT NULL, `isAvailable` INTEGER NOT NULL, `rating` REAL NOT NULL, `ratingCount` INTEGER NOT NULL, PRIMARY KEY(`carId`), FOREIGN KEY(`ownerId`) REFERENCES `users`(`userId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`carId` TEXT NOT NULL, `ownerId` TEXT NOT NULL, `brand` TEXT NOT NULL, `model` TEXT NOT NULL, `year` INTEGER NOT NULL, `description` TEXT NOT NULL, `pricePerDay` REAL NOT NULL, `location` TEXT NOT NULL, `isAvailable` INTEGER NOT NULL, `rating` REAL NOT NULL, `ratingCount` INTEGER NOT NULL, `imageUri` TEXT, PRIMARY KEY(`carId`), FOREIGN KEY(`ownerId`) REFERENCES `users`(`userId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "carId",
@@ -147,6 +147,12 @@
             "columnName": "ratingCount",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "imageUri",
+            "columnName": "imageUri",
+            "affinity": "TEXT",
+            "notNull": false
           }
         ],
         "primaryKey": {
@@ -405,7 +411,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1bb91d3e4e6c365297798bceff7cbf6c')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'de613189027dc3eeb4d0d627d1595f23')"
     ]
   }
 }

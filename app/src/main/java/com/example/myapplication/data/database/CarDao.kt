@@ -43,7 +43,7 @@ interface CarDao {
     @Query("UPDATE cars SET rating = :rating, ratingCount = :ratingCount WHERE carId = :carId")
     suspend fun updateCarRating(carId: String, rating: Float, ratingCount: Int)
 
-    // Car image operations
+    
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCarImage(carImage: CarImage)
 
@@ -58,4 +58,7 @@ interface CarDao {
 
     @Delete
     suspend fun deleteCarImage(image: CarImage)
+
+    @Update
+    suspend fun updateCarImage(carImage: CarImage)
 } 

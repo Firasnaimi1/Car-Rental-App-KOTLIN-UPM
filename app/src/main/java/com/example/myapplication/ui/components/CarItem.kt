@@ -42,21 +42,25 @@ fun CarItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column {
-            // Placeholder for car image
+            // Car image display
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
+                // Get image URI from car object
+                val imageUri = if (car.imageUri != null && car.imageUri.isNotEmpty()) {
+                    car.imageUri
+                } else {
+                    android.R.drawable.ic_menu_gallery
+                }
+                
                 // Use SubcomposeAsyncImage to handle loading states
                 SubcomposeAsyncImage(
                     model = ImageRequest.Builder(context)
-                        .data(android.R.drawable.ic_menu_gallery)
+                        .data(imageUri)
                         .crossfade(true)
-                        .placeholder(android.R.drawable.ic_menu_gallery)
-                        .fallback(android.R.drawable.ic_menu_gallery)
-                        .error(android.R.drawable.ic_menu_report_image)
                         .build(),
                     contentDescription = "${car.brand} ${car.model}",
                     contentScale = ContentScale.Crop,

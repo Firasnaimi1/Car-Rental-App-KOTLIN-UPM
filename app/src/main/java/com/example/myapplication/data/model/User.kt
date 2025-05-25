@@ -13,7 +13,7 @@ data class User(
     val phoneNumber: String,
     val address: String,
     val userType: UserType,
-    val profileImageUrl: String? = null,
+    val profileImageUri: String? = null,
     val rating: Float = 0f,
     val ratingCount: Int = 0
 )
@@ -21,4 +21,4 @@ data class User(
 enum class UserType {
     OWNER,
     RENTER
-} 
+}

@@ -27,7 +27,8 @@ data class Car(
     val location: String,
     val isAvailable: Boolean = true,
     val rating: Float = 0f,
-    val ratingCount: Int = 0
+    val ratingCount: Int = 0,
+    val imageUri: String? = null
 )
 
 @Entity(

@@ -1,12 +1,23 @@
 package com.example.myapplication.data.repository
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import androidx.core.net.toUri
 import com.example.myapplication.data.database.CarDao
 import com.example.myapplication.data.model.Car
 import com.example.myapplication.data.model.CarImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import java.util.*
 
-class CarRepository(private val carDao: CarDao) {
+class CarRepository(private val carDao: CarDao, private val context: Context) {
 
     suspend fun insertCar(car: Car) = carDao.insertCar(car)
     
@@ -45,6 +56,46 @@ class CarRepository(private val carDao: CarDao) {
     
     suspend fun deleteCarImage(image: CarImage) = carDao.deleteCarImage(image)
     
+    private suspend fun saveImageToInternalStorage(imageUri: Uri, filename: String): String = withContext(Dispatchers.IO) {
+        try {
+            // For simplicity, just return the original URI as a string
+            // This avoids potential file access issues
+            return@withContext imageUri.toString()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Return empty string instead of throwing exception
+            return@withContext ""
+        }
+    }
+    
+    suspend fun updateCarImage(carId: String, imageUri: Uri) = withContext(Dispatchers.IO) {
+        try {
+            // Simply store the original URI string
+            val savedImageUri = imageUri.toString()
+            
+            // Get existing primary image
+            val existingImage = carDao.getCarPrimaryImage(carId)
+            
+            if (existingImage != null) {
+                // Update the existing image with new URI
+                val updatedImage = existingImage.copy(imageUrl = savedImageUri)
+                carDao.updateCarImage(updatedImage)
+            } else {
+                // Create a new image if none exists
+                val newImage = CarImage(
+                    imageId = UUID.randomUUID().toString(),
+                    carId = carId,
+                    imageUrl = savedImageUri,
+                    isPrimary = true
+                )
+                carDao.insertCarImage(newImage)
+            }
+        } catch (e: Exception) {
+            // Log error but don't crash
+            e.printStackTrace()
+        }
+    }
+    
     /**
      * Create a new car with the given information
      */
@@ -56,7 +107,7 @@ class CarRepository(private val carDao: CarDao) {
         description: String,
         pricePerDay: Double,
         location: String,
-        imageUrls: List<String> = emptyList()
+        imageUri: Uri?
     ): Car {
         try {
             val carId = UUID.randomUUID().toString()
@@ -80,18 +131,20 @@ class CarRepository(private val carDao: CarDao) {
                 throw Exception("Failed to insert car into database")
             }
             
-            if (imageUrls.isNotEmpty()) {
+            if (imageUri != null) {
                 try {
-                    val carImages = imageUrls.mapIndexed { index, url ->
-                        CarImage(
-                            imageId = UUID.randomUUID().toString(),
-                            carId = carId,
-                            imageUrl = url,
-                            isPrimary = index == 0
-                        )
-                    }
-                    insertCarImages(carImages)
+                    // Simply store the URI string directly
+                    val savedImageUri = imageUri.toString()
+                    
+                    val carImage = CarImage(
+                        imageId = UUID.randomUUID().toString(),
+                        carId = carId,
+                        imageUrl = savedImageUri,
+                        isPrimary = true
+                    )
+                    insertCarImage(carImage)
                 } catch (e: Exception) {
+                    // Just log the error but continue
                     e.printStackTrace()
                 }
             }

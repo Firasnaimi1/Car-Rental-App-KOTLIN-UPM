@@ -29,6 +29,7 @@ import com.example.myapplication.ui.car.MyCarsScreen
 import com.example.myapplication.ui.home.HomeScreen
 import com.example.myapplication.ui.reservation.MyReservationsScreen
 import com.example.myapplication.ui.reservation.ReservationRequestsScreen
+import com.example.myapplication.ui.reservation.ReservationHistoryScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.ui.profile.ProfileScreen
 
@@ -112,6 +113,15 @@ fun CarRentalApp() {
                 }
             }
             
+            composable("edit_car/{carId}") { backStackEntry ->
+                val carId = backStackEntry.arguments?.getString("carId") ?: ""
+                currentUser?.let { user ->
+                    AddCarScreen(navController, user, editCarId = carId)
+                } ?: run {
+                    navController.navigate("login")
+                }
+            }
+            
             composable("my_cars") {
                 currentUser?.let { user ->
                     MyCarsScreen(navController, user)
@@ -131,6 +141,14 @@ fun CarRentalApp() {
             composable("reservation_requests") {
                 currentUser?.let { user ->
                     ReservationRequestsScreen(navController, user)
+                } ?: run {
+                    navController.navigate("login")
+                }
+            }
+            
+            composable("reservation_history") {
+                currentUser?.let { user ->
+                    ReservationHistoryScreen(navController, user)
                 } ?: run {
                     navController.navigate("login")
                 }

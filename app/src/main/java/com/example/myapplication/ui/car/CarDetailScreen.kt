@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +66,9 @@ fun CarDetailScreen(
     val carDetailState by carViewModel.carDetailState.collectAsState()
     val createReservationState by reservationViewModel.createReservationState.collectAsState()
     val ratingsState by ratingViewModel.carRatingsState.collectAsState()
+    
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(carDetailState) {
         when (carDetailState) {
@@ -82,6 +87,28 @@ fun CarDetailScreen(
     var showReservationDialog by remember { mutableStateOf(false) }
     var startDate by remember { mutableStateOf(LocalDate.now()) }
     var endDate by remember { mutableStateOf(LocalDate.now().plusDays(1)) }
+    
+    // State to hold information about existing reservations for conflict checking
+    var existingReservations by remember { mutableStateOf<List<Pair<LocalDate, LocalDate>>>(emptyList()) }
+    
+    // Load existing reservations for the car to check for conflicts
+    LaunchedEffect(carId) {
+        try {
+            val reservations = reservationViewModel.getReservationsForCar(carId)
+            existingReservations = reservations.map { it.startDate to it.endDate }
+        } catch (e: Exception) {
+            // If we can't load reservations, we'll just proceed without conflict checking
+            println("Failed to load existing reservations: ${e.message}")
+        }
+    }
+    
+    // Function to check if selected dates conflict with existing reservations
+    fun hasDateConflict(start: LocalDate, end: LocalDate): Boolean {
+        return existingReservations.any { (existingStart, existingEnd) ->
+            // Check if our dates overlap with existing reservation
+            !(end.isBefore(existingStart) || start.isAfter(existingEnd))
+        }
+    }
 
     LaunchedEffect(carId) {
         carViewModel.loadCarDetail(carId)
@@ -128,7 +155,9 @@ fun CarDetailScreen(
                         images = images,
                         currentUser = currentUser,
                         onReserveClick = { showReservationDialog = true },
-                        ratingsState = ratingsState
+                        ratingsState = ratingsState,
+                        onEditClick = { showEditDialog = true },
+                        onDeleteClick = { showDeleteDialog = true }
                     )
                 }
                 
@@ -272,6 +301,36 @@ fun CarDetailScreen(
                         )
                     }
                     
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Show conflict warning if dates are unavailable
+                    val hasConflict = hasDateConflict(startDate, endDate)
+                    if (hasConflict) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Error,
+                                    contentDescription = "Warning",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "These dates are already booked. Please select different dates.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                    
                     if (createReservationState is CreateReservationState.Error) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -283,6 +342,8 @@ fun CarDetailScreen(
                 }
             },
             confirmButton = {
+                // Disable the button when there's a date conflict
+                val hasConflict = hasDateConflict(startDate, endDate)
                 Button(
                     onClick = {
                         reservationViewModel.createReservation(
@@ -292,7 +353,7 @@ fun CarDetailScreen(
                             endDate = endDate
                         )
                     },
-                    enabled = createReservationState !is CreateReservationState.Loading
+                    enabled = !hasConflict && createReservationState !is CreateReservationState.Loading
                 ) {
                     if (createReservationState is CreateReservationState.Loading) {
                         CircularProgressIndicator(
@@ -311,6 +372,139 @@ fun CarDetailScreen(
             }
         )
     }
+    
+    // Delete Confirmation Dialog
+    if (showDeleteDialog && carDetailState is CarDetailState.Success) {
+        val car = (carDetailState as CarDetailState.Success).car
+        
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Car") },
+            text = { 
+                Text("Are you sure you want to delete ${car.brand} ${car.model}? This action cannot be undone.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Delete car and navigate back
+                        carViewModel.deleteCar(car.carId)
+                        showDeleteDialog = false
+                        navController.navigateUp()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Edit Car Dialog
+    if (showEditDialog && carDetailState is CarDetailState.Success) {
+        val car = (carDetailState as CarDetailState.Success).car
+        var brand by remember { mutableStateOf(car.brand) }
+        var model by remember { mutableStateOf(car.model) }
+        var year by remember { mutableStateOf(car.year.toString()) }
+        var pricePerDay by remember { mutableStateOf(car.pricePerDay.toString()) }
+        var location by remember { mutableStateOf(car.location) }
+        var description by remember { mutableStateOf(car.description) }
+        
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Edit Car") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    OutlinedTextField(
+                        value = brand,
+                        onValueChange = { brand = it },
+                        label = { Text("Brand") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    OutlinedTextField(
+                        value = model,
+                        onValueChange = { model = it },
+                        label = { Text("Model") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    OutlinedTextField(
+                        value = year,
+                        onValueChange = { year = it },
+                        label = { Text("Year") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    OutlinedTextField(
+                        value = pricePerDay,
+                        onValueChange = { pricePerDay = it },
+                        label = { Text("Price Per Day ($)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    OutlinedTextField(
+                        value = location,
+                        onValueChange = { location = it },
+                        label = { Text("Location") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        maxLines = 5
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Update car details
+                        val updatedCar = car.copy(
+                            brand = brand,
+                            model = model,
+                            year = year.toIntOrNull() ?: car.year,
+                            pricePerDay = pricePerDay.toDoubleOrNull() ?: car.pricePerDay,
+                            location = location,
+                            description = description
+                        )
+                        carViewModel.updateCar(updatedCar)
+                        showEditDialog = false
+                    }
+                ) {
+                    Text("Save Changes")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -319,7 +513,9 @@ private fun CarDetailsContent(
     images: List<CarImage>,
     currentUser: User,
     onReserveClick: () -> Unit,
-    ratingsState: RatingsState
+    ratingsState: RatingsState,
+    onEditClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     
@@ -333,16 +529,16 @@ private fun CarDetailsContent(
                 .fillMaxWidth()
                 .height(250.dp)
         ) {
-            val imageUrl = if (images.isNotEmpty()) {
-                val primaryImage = images.find { it.isPrimary }
-                primaryImage?.imageUrl ?: images.first().imageUrl
+            // Get image URI directly from the car object
+            val imageUri = if (car.imageUri != null && car.imageUri.isNotEmpty()) {
+                car.imageUri
             } else {
-                "https://via.placeholder.com/800x600?text=No+Image"
+                android.R.drawable.ic_menu_gallery
             }
             
             SubcomposeAsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(android.R.drawable.ic_menu_gallery)
+                    .data(imageUri)
                     .crossfade(true)
                     .placeholder(android.R.drawable.ic_menu_gallery)
                     .fallback(android.R.drawable.ic_menu_gallery)
@@ -491,6 +687,42 @@ private fun CarDetailsContent(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Reserve Now")
+                }
+            } else if (currentUser.userId == car.ownerId) {
+                // Show owner actions (edit/delete) if the current user is the owner
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = onEditClick,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Car"
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Edit")
+                        }
+                    }
+                    
+                    Button(
+                        onClick = onDeleteClick,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Car"
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Delete")
+                        }
+                    }
                 }
             }
             

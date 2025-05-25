@@ -7,10 +7,7 @@ import com.example.myapplication.data.repository.RatingRepository
 import com.example.myapplication.data.repository.ReservationRepository
 import com.example.myapplication.data.repository.UserRepository
 
-/**
- * Dependency injection module for the application
- * In a real app, you'd use a DI framework like Hilt or Koin
- */
+
 object AppModule {
     
     private var database: AppDatabase? = null
@@ -39,7 +36,7 @@ object AppModule {
     fun provideCarRepository(context: Context): CarRepository {
         return carRepository ?: synchronized(this) {
             val db = provideDatabase(context)
-            val instance = CarRepository(db.carDao())
+            val instance = CarRepository(db.carDao(), context)
             carRepository = instance
             instance
         }

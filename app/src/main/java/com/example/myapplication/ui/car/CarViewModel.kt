@@ -16,6 +16,9 @@ class CarViewModel(private val carRepository: CarRepository) : ViewModel() {
 
     private val _carDetailState = MutableStateFlow<CarDetailState>(CarDetailState.Loading)
     val carDetailState: StateFlow<CarDetailState> = _carDetailState
+    
+    private val _carState = MutableStateFlow<CarState>(CarState.Loading)
+    val carState: StateFlow<CarState> = _carState
 
     private val _userCarsState = MutableStateFlow<CarsState>(CarsState.Loading)
     val userCarsState: StateFlow<CarsState> = _userCarsState
@@ -70,16 +73,23 @@ class CarViewModel(private val carRepository: CarRepository) : ViewModel() {
                 println("CarViewModel: Loading car details for $carId")
                 val car = carRepository.getCarById(carId)
                 if (car != null) {
-                    val carImages = try {
-                        println("CarViewModel: Got car, now loading images")
-                        emptyList<CarImage>()
+                    // Use an empty list for now and update once we collect from Flow
+                    val initialImages = emptyList<CarImage>()
+                    println("CarViewModel: Got car, now loading images")
+                    _carDetailState.value = CarDetailState.Success(car, initialImages)
+                    
+                    // Collect images from Flow in a separate coroutine
+                    try {
+                        carRepository.getCarImages(carId).collect { images ->
+                            println("CarViewModel: Collected ${images.size} images")
+                            _carDetailState.value = CarDetailState.Success(car, images)
+                        }
                     } catch (e: Exception) {
                         println("CarViewModel ERROR loading images: ${e.message}")
-                        emptyList<CarImage>()
+                        // We already set the success state with empty images, so no need to update here
                     }
                     
                     println("CarViewModel: Setting success state with car: ${car.brand} ${car.model}")
-                    _carDetailState.value = CarDetailState.Success(car, carImages)
                 } else {
                     println("CarViewModel ERROR: Car not found for ID $carId")
                     _carDetailState.value = CarDetailState.Error("Car not found")
@@ -88,6 +98,22 @@ class CarViewModel(private val carRepository: CarRepository) : ViewModel() {
                 e.printStackTrace()
                 println("CarViewModel ERROR: ${e.message}")
                 _carDetailState.value = CarDetailState.Error(e.message ?: "Failed to load car details")
+            }
+        }
+    }
+    
+    fun loadCarById(carId: String) {
+        viewModelScope.launch {
+            _carState.value = CarState.Loading
+            try {
+                val car = carRepository.getCarById(carId)
+                if (car != null) {
+                    _carState.value = CarState.Success(car)
+                } else {
+                    _carState.value = CarState.Error("Car not found")
+                }
+            } catch (e: Exception) {
+                _carState.value = CarState.Error(e.message ?: "Failed to load car")
             }
         }
     }
@@ -196,7 +222,7 @@ class CarViewModel(private val carRepository: CarRepository) : ViewModel() {
         description: String,
         pricePerDay: Double,
         location: String,
-        imageUrls: List<String>
+        imageUri: android.net.Uri?
     ) {
         viewModelScope.launch {
             _carCreationState.value = CarCreationState.Loading
@@ -209,12 +235,94 @@ class CarViewModel(private val carRepository: CarRepository) : ViewModel() {
                     description = description,
                     pricePerDay = pricePerDay,
                     location = location,
-                    imageUrls = imageUrls
+                    imageUri = imageUri
                 )
                 loadUserCars(ownerId)
                 _carCreationState.value = CarCreationState.Success(car)
             } catch (e: Exception) {
                 _carCreationState.value = CarCreationState.Error(e.message ?: "Failed to add car")
+            }
+        }
+    }
+
+    fun updateCar(
+        carId: String,
+        ownerId: String,
+        brand: String,
+        model: String,
+        year: Int,
+        description: String,
+        pricePerDay: Double,
+        location: String,
+        imageUri: android.net.Uri?
+    ) {
+        viewModelScope.launch {
+            _carCreationState.value = CarCreationState.Loading
+            try {
+                val existingCar = carRepository.getCarById(carId)
+                if (existingCar == null || existingCar.ownerId != ownerId) {
+                    _carCreationState.value = CarCreationState.Error("You can only update your own cars")
+                    return@launch
+                }
+                
+                val updatedCar = existingCar.copy(
+                    brand = brand,
+                    model = model,
+                    year = year,
+                    description = description,
+                    pricePerDay = pricePerDay,
+                    location = location
+                )
+                
+                carRepository.updateCar(updatedCar)
+                
+                // Update image if new one was provided
+                if (imageUri != null) {
+                    carRepository.updateCarImage(carId, imageUri)
+                }
+                
+                loadUserCars(ownerId)
+                _carCreationState.value = CarCreationState.Success(updatedCar)
+            } catch (e: Exception) {
+                _carCreationState.value = CarCreationState.Error(e.message ?: "Failed to update car")
+            }
+        }
+    }
+    
+    fun deleteCar(carId: String) {
+        viewModelScope.launch {
+            try {
+                // Get the car first to check ownership
+                val car = carRepository.getCarById(carId)
+                if (car != null) {
+                    carRepository.deleteCar(car)
+                    // Refresh user cars
+                    loadUserCars(car.ownerId)
+                }
+            } catch (e: Exception) {
+                // Handle error
+                println("Error deleting car: ${e.message}")
+            }
+        }
+    }
+    
+    fun updateCar(car: Car) {
+        viewModelScope.launch {
+            try {
+                carRepository.updateCar(car)
+                // Update both car states
+                _carState.value = CarState.Success(car)
+                loadCarDetail(car.carId)
+                // Also update user cars list
+                loadUserCars(car.ownerId)
+                // Update creation state to indicate success
+                _carCreationState.value = CarCreationState.Success(car)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                println("Error updating car: ${e.message}")
+                _carDetailState.value = CarDetailState.Error(e.message ?: "Failed to update car")
+                _carState.value = CarState.Error(e.message ?: "Failed to update car")
+                _carCreationState.value = CarCreationState.Error(e.message ?: "Failed to update car")
             }
         }
     }
@@ -254,4 +362,11 @@ data class CarsFilter(
     val city: String? = null,
     val maxPrice: Double? = null,
     val model: String? = null
-) 
+)
+
+// State for individual car loading
+sealed class CarState {
+    object Loading : CarState()
+    data class Success(val car: Car) : CarState()
+    data class Error(val message: String) : CarState()
+}

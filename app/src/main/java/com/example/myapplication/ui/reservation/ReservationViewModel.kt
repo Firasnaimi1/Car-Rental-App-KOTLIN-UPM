@@ -17,15 +17,15 @@ class ReservationViewModel(
     private val carRepository: CarRepository
 ) : ViewModel() {
 
-    // Renter reservations
+    
     private val _renterReservationsState = MutableStateFlow<ReservationsState>(ReservationsState.Loading)
     val renterReservationsState: StateFlow<ReservationsState> = _renterReservationsState
 
-    // Owner reservation requests
+    
     private val _ownerReservationsState = MutableStateFlow<ReservationsState>(ReservationsState.Loading)
     val ownerReservationsState: StateFlow<ReservationsState> = _ownerReservationsState
 
-    // Reservation creation state
+    
     private val _createReservationState = MutableStateFlow<CreateReservationState>(CreateReservationState.Idle)
     val createReservationState: StateFlow<CreateReservationState> = _createReservationState
 
@@ -65,6 +65,66 @@ class ReservationViewModel(
         }
     }
 
+    fun loadAllOwnerReservations(ownerId: String) {
+        viewModelScope.launch {
+            _ownerReservationsState.value = ReservationsState.Loading
+            try {
+                // Load one status at a time and combine results
+                // This approach avoids problems with collecting multiple flows at once
+                val allReservations = mutableListOf<Reservation>()
+                
+                // Process each status one by one
+                for (status in ReservationStatus.values()) {
+                    try {
+                        val reservationsFlow = reservationRepository.getOwnerReservationsByStatus(ownerId, status)
+                        val statusReservations = reservationsFlow.firstOrNull() ?: emptyList()
+                        allReservations.addAll(statusReservations)
+                    } catch (e: Exception) {
+                        // Log error but continue with other statuses
+                        println("Error loading reservations with status $status: ${e.message}")
+                    }
+                }
+                
+                if (allReservations.isEmpty()) {
+                    _ownerReservationsState.value = ReservationsState.Empty
+                } else {
+                    _ownerReservationsState.value = ReservationsState.Success(allReservations)
+                }
+            } catch (e: Exception) {
+                _ownerReservationsState.value = ReservationsState.Error(e.message ?: "Failed to load reservation history")
+            }
+        }
+    }
+
+    fun loadOwnerReservationsByStatus(ownerId: String, status: ReservationStatus) {
+        viewModelScope.launch {
+            _ownerReservationsState.value = ReservationsState.Loading
+            try {
+                reservationRepository.getOwnerReservationsByStatus(ownerId, status)
+                    .collect { reservations ->
+                        if (reservations.isEmpty()) {
+                            _ownerReservationsState.value = ReservationsState.Empty
+                        } else {
+                            _ownerReservationsState.value = ReservationsState.Success(reservations)
+                        }
+                    }
+            } catch (e: Exception) {
+                _ownerReservationsState.value = ReservationsState.Error(e.message ?: "Failed to load ${status.name.lowercase()} reservations")
+            }
+        }
+    }
+
+    // Get all reservations for a specific car
+    suspend fun getReservationsForCar(carId: String): List<Reservation> {
+        return try {
+            // We need to collect the flow to get the actual list
+            reservationRepository.getReservationsByCarId(carId).firstOrNull() ?: emptyList()
+        } catch (e: Exception) {
+            println("Error getting reservations for car: ${e.message}")
+            emptyList()
+        }
+    }
+
     fun createReservation(
         carId: String,
         renterId: String,
@@ -84,14 +144,16 @@ class ReservationViewModel(
         _createReservationState.value = CreateReservationState.Loading
         viewModelScope.launch {
             try {
-                // Get car details to calculate price
-                val car = carRepository.getCarById(carId)
-                if (car == null) {
-                    _createReservationState.value = CreateReservationState.Error("Car not found")
+                // Check for conflicts first
+                val conflicts = reservationRepository.getConflictingReservations(carId, startDate, endDate)
+                if (conflicts.isNotEmpty()) {
+                    _createReservationState.value = CreateReservationState.Error("These dates are already booked. Please select different dates.")
                     return@launch
                 }
-
-                // Create reservation
+                
+                // Get the car to get its price
+                val car = carRepository.getCarById(carId) ?: throw Exception("Car not found")
+                
                 val reservation = reservationRepository.createReservation(
                     carId = carId,
                     renterId = renterId,
@@ -99,11 +161,11 @@ class ReservationViewModel(
                     endDate = endDate,
                     pricePerDay = car.pricePerDay
                 )
-
+                
                 if (reservation != null) {
                     _createReservationState.value = CreateReservationState.Success(reservation)
                 } else {
-                    _createReservationState.value = CreateReservationState.Error("Selected dates are already booked")
+                    _createReservationState.value = CreateReservationState.Error("Failed to create reservation. Dates may be unavailable.")
                 }
             } catch (e: Exception) {
                 _createReservationState.value = CreateReservationState.Error(e.message ?: "Failed to create reservation")
@@ -114,14 +176,14 @@ class ReservationViewModel(
     fun approveReservation(reservationId: String, ownerId: String) {
         viewModelScope.launch {
             try {
-                // First verify the user is the owner of the car
+               
                 val reservation = reservationRepository.getReservationById(reservationId)
                 if (reservation != null) {
                     val car = carRepository.getCarById(reservation.carId)
                     if (car != null && car.ownerId == ownerId) {
                         val success = reservationRepository.processReservationResponse(reservationId, true)
                         if (success) {
-                            // Refresh the owner's pending reservations
+                            
                             loadOwnerPendingReservations(ownerId)
                         }
                     }
@@ -135,20 +197,20 @@ class ReservationViewModel(
     fun rejectReservation(reservationId: String, ownerId: String) {
         viewModelScope.launch {
             try {
-                // First verify the user is the owner of the car
+                
                 val reservation = reservationRepository.getReservationById(reservationId)
                 if (reservation != null) {
                     val car = carRepository.getCarById(reservation.carId)
                     if (car != null && car.ownerId == ownerId) {
                         val success = reservationRepository.processReservationResponse(reservationId, false)
                         if (success) {
-                            // Refresh the owner's pending reservations
+                            
                             loadOwnerPendingReservations(ownerId)
                         }
                     }
                 }
             } catch (e: Exception) {
-                // Handle error - could update state for UI feedback
+                
             }
         }
     }
@@ -156,12 +218,12 @@ class ReservationViewModel(
     fun cancelReservation(reservationId: String, renterId: String) {
         viewModelScope.launch {
             try {
-                // Verify the user is the actual renter
+                
                 val reservation = reservationRepository.getReservationById(reservationId)
                 if (reservation != null && reservation.renterId == renterId) {
                     val success = reservationRepository.cancelReservation(reservationId)
                     if (success) {
-                        // Refresh the renter's reservations
+                        
                         loadRenterReservations(renterId)
                     }
                 }
@@ -174,7 +236,7 @@ class ReservationViewModel(
     fun payForReservation(reservationId: String, renterId: String) {
         viewModelScope.launch {
             try {
-                // Verify the user is the actual renter
+                
                 val reservation = reservationRepository.getReservationById(reservationId)
                 if (reservation != null && reservation.renterId == renterId) {
                     reservationRepository.markReservationAsPaid(reservationId)
@@ -191,7 +253,7 @@ class ReservationViewModel(
         _createReservationState.value = CreateReservationState.Idle
     }
 
-    // Factory for creating the ViewModel with dependencies
+    
     class Factory(
         private val reservationRepository: ReservationRepository,
         private val carRepository: CarRepository
@@ -206,7 +268,7 @@ class ReservationViewModel(
     }
 }
 
-// States for reservation list UI
+
 sealed class ReservationsState {
     object Loading : ReservationsState()
     object Empty : ReservationsState()
@@ -214,7 +276,7 @@ sealed class ReservationsState {
     data class Error(val message: String) : ReservationsState()
 }
 
-// States for reservation creation
+
 sealed class CreateReservationState {
     object Idle : CreateReservationState()
     object Loading : CreateReservationState()
